@@ -2,33 +2,37 @@ package main
 
 import (
 	"fmt"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"log"
-)
 
+	"github.com/confluentinc/confluent-kafka-go/kafka"
+) // Import the kafka package
+
+var producer *kafka.Producer = NewKafkaProducer()
+
+// Create a new Kafka producer
 func main() {
 	deliveryChan := make(chan kafka.Event)
-	producer := NewKafkaProducer()
-	Publish("transferiu", "teste", producer, []byte("transferecia2"), deliveryChan)
-	DeliveryReport(deliveryChan) // async
 
+	for i := 0; i < 20000; i++ {
+		msgsent := fmt.Sprintf("Hello World #%d", i)
 
+		// Para ir para o mesmo tópico
+		// Publish(msgsent, "teste", producer, []byte("transferred"), deliveryChan)
 
-	//e := <-deliveryChan
-	//msg := e.(*kafka.Message)
-	//if msg.TopicPartition.Error != nil {
-	//	fmt.Println("Erro ao enviar")
-	//} else {
-	//	fmt.Println("Mensagem enviada:", msg.TopicPartition)
-	//}
-	//
+		// Para ir para um tópico diferente
+		Publish(msgsent, "teste", producer, nil, deliveryChan)
 
+		go DeliveryReport(deliveryChan)
+	}
+
+	producer.Flush(1000)
 }
 
 func NewKafkaProducer() *kafka.Producer {
+	// Mapa de configurações do Kafka para passar para o producer
 	configMap := &kafka.ConfigMap{
-		"bootstrap.servers":   "gokafka_kafka_1:9092",
-		"delivery.timeout.ms": "0",
+		"bootstrap.servers":   "go-kafka-1:9092",
+		"delivery.timeout.ms": "100", // gera alguns erros por timeout
 		"acks":                "all",
 		"enable.idempotence":  "true",
 	}
@@ -45,10 +49,12 @@ func Publish(msg string, topic string, producer *kafka.Producer, key []byte, del
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 		Key:            key,
 	}
+
 	err := producer.Produce(message, deliveryChan)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -57,11 +63,18 @@ func DeliveryReport(deliveryChan chan kafka.Event) {
 		switch ev := e.(type) {
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
-				fmt.Println("Erro ao enviar")
+				result_msg := fmt.Sprintf("[ERROR] Delivery failed!!!! [%s][Topic: %s][Patition: %d][Offset: %v]",
+					ev.Value, *ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
+				log.Printf("%s\n", result_msg)
+
+				Publish(result_msg, "error", producer, []byte("process-error"), nil)
 			} else {
-				fmt.Println("Mensagem enviada:", ev.TopicPartition)
-				// anotar no banco de dados que a mensagem foi processado.
-				// ex: confirma que uma transferencia bancaria ocorreu.
+				result_msg := fmt.Sprintf("Delivered message [%s][Topic: %s][Patition: %d][Offset: %v]",
+					ev.Value, *ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
+				log.Printf("%s\n", result_msg)
+
+				Publish(result_msg, "result", producer, []byte("process-result"), nil)
+				// Exemplo: anotar no banco de dados que a mensagem foi enviada
 			}
 		}
 	}
