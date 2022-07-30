@@ -16,10 +16,10 @@ func main() {
 	for i := 0; i < 20000; i++ {
 		msgsent := fmt.Sprintf("Hello World #%d", i)
 
-		// Para ir para o mesmo tópico
+		// Para ir para o mesma partição
 		// Publish(msgsent, "teste", producer, []byte("transferred"), deliveryChan)
 
-		// Para ir para um tópico diferente
+		// Para ir para uma partição aleatória
 		Publish(msgsent, "teste", producer, nil, deliveryChan)
 
 		go DeliveryReport(deliveryChan)
